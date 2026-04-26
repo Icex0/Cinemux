@@ -54,6 +54,13 @@ export function Detail({ type, id }: { type: "movie" | "tv"; id: string }) {
   // so player-emitted episode changes don't reload the iframe.
   const [loaded, setLoaded] = useState<{ s: number; e: number; startAt: number; sub: string } | null>(null);
   const [providerId, setProviderId] = useState<string>(DEFAULT_PROVIDER);
+  // Used to skip the URL→state effect when WE were the ones who just wrote to the URL,
+  // so a host's in-iframe "Next Episode" doesn't trigger a self-reload.
+  const localUrlUpdate = useRef(false);
+  // Tracks whether the iframe is on its first load (don't autoplay) vs a subsequent reload (do autoplay).
+  const loadedCountRef = useRef(0);
+  const sParam = searchParams.get("s");
+  const eParam = searchParams.get("e");
 
   useEffect(() => {
     if (roomCode && ALPHA_PROVIDER) { setProviderId(ALPHA_PROVIDER.id); return; }
@@ -70,14 +77,49 @@ export function Detail({ type, id }: { type: "movie" | "tv"; id: string }) {
     const saved = readProgress()[(type === "tv" ? "t" : "m") + id];
     const startAt = saved?.progress?.watched ? Math.floor(saved.progress.watched) : 0;
     let s = 1, e = 1;
-    if (type === "tv" && saved?.last_season_watched) {
-      s = saved.last_season_watched;
-      e = saved.last_episode_watched || 1;
+    let fromUrl = false;
+    if (type === "tv") {
+      const urlS = Number(sParam);
+      const urlE = Number(eParam);
+      if (urlS && urlE) {
+        s = urlS; e = urlE; fromUrl = true;
+      } else if (saved?.last_season_watched) {
+        s = saved.last_season_watched;
+        e = saved.last_episode_watched || 1;
+      }
     }
     setSeason(s);
     setEpisode(e);
-    setLoaded({ s, e, startAt, sub: "en" });
+    setLoaded({ s, e, startAt: fromUrl ? 0 : startAt, sub: "en" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, type]);
+
+  // URL → state. Drives guests when host changes episode (router.replace from Room).
+  useEffect(() => {
+    if (type !== "tv") return;
+    if (localUrlUpdate.current) { localUrlUpdate.current = false; return; }
+    const s = Number(sParam);
+    const e = Number(eParam);
+    if (!s || !e) return;
+    setSeason(s);
+    setEpisode(e);
+    setLoaded((prev) => prev && prev.s === s && prev.e === e ? prev : { s, e, startAt: 0, sub: prev?.sub ?? "en" });
+  }, [sParam, eParam, type]);
+
+  // state → URL. Keeps URL in sync with whatever's playing so deep links + watch-party joiners land on the right episode.
+  useEffect(() => {
+    if (type !== "tv" || !loaded) return;
+    if (sParam === String(season) && eParam === String(episode)) return;
+    localUrlUpdate.current = true;
+    const sp = new URLSearchParams(searchParams.toString());
+    const room = sp.get("room");
+    sp.delete("room");
+    sp.set("s", String(season));
+    sp.set("e", String(episode));
+    if (room) sp.set("room", room);
+    router.replace(`${pathname}?${sp.toString()}`, { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [season, episode, type]);
 
   useEffect(() => {
     setDetails(null);
@@ -93,8 +135,13 @@ export function Detail({ type, id }: { type: "movie" | "tv"; id: string }) {
   const src = useMemo(() => {
     if (!loaded || !provider) return "";
     const opts = { startAt: loaded.startAt, sub: loaded.sub };
-    return type === "tv" ? provider.tvUrl(id, loaded.s, loaded.e, opts) : provider.movieUrl(id, opts);
-  }, [type, id, loaded, provider]);
+    const base = type === "tv" ? provider.tvUrl(id, loaded.s, loaded.e, opts) : provider.movieUrl(id, opts);
+    // Append autoPlay=true on subsequent loads (user picked a new episode/provider, or guest got a remote change)
+    // and always when in a watch party. The very first load on a fresh detail page is left alone.
+    const wantAutoplay = (loadedCountRef.current > 0 || !!roomCode) && providerId === ALPHA_PROVIDER?.id;
+    if (!wantAutoplay) return base;
+    return base + (base.includes("?") ? "&" : "?") + "autoPlay=true";
+  }, [type, id, loaded, provider, providerId, roomCode]);
 
   // The Alpha provider is the only one expected to emit MEDIA_DATA.
   const alphaOrigin = ALPHA_PROVIDER?.origin || "";
@@ -106,14 +153,20 @@ export function Detail({ type, id }: { type: "movie" | "tv"; id: string }) {
         // Sync dropdown with whatever the player is now showing (e.g. user clicked Next Episode in the iframe).
         const entry = data.data?.[(type === "tv" ? "t" : "m") + id];
         if (entry && type === "tv") {
-          if (entry.last_season_watched) setSeason(entry.last_season_watched);
-          if (entry.last_episode_watched) setEpisode(entry.last_episode_watched);
+          const newS = entry.last_season_watched;
+          const newE = entry.last_episode_watched;
+          // If the iframe internally advanced to a different episode, vidup doesn't autoplay — kick it off.
+          if (newS && newE && (newS !== season || newE !== episode)) {
+            iframeRef.current?.contentWindow?.postMessage({ command: "play" }, alphaOrigin);
+          }
+          if (newS) setSeason(newS);
+          if (newE) setEpisode(newE);
         }
       }
     }
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
-  }, [id, type]);
+  }, [id, type, season, episode, alphaOrigin]);
 
   const onSeasonPicked = (s: number) => {
     setSeason(s);
@@ -124,6 +177,42 @@ export function Detail({ type, id }: { type: "movie" | "tv"; id: string }) {
     setEpisode(e);
     setLoaded((prev) => prev ? { ...prev, s: season, e, startAt: 0 } : prev);
   };
+  const goToEpisode = (s: number, e: number) => {
+    setSeason(s);
+    setEpisode(e);
+    setLoaded((prev) => prev ? { ...prev, s, e, startAt: 0 } : { s, e, startAt: 0, sub: "en" });
+  };
+  const stepEpisode = (delta: 1 | -1) => {
+    if (!details?.seasonList?.length) return;
+    const list = details.seasonList;
+    const idx = list.findIndex((sn) => sn.season_number === season);
+    const cur = idx === -1 ? list[0] : list[idx];
+    const epCount = cur?.episode_count ?? 1;
+    if (delta === 1) {
+      if (episode < epCount) goToEpisode(season, episode + 1);
+      else if (idx >= 0 && idx < list.length - 1) goToEpisode(list[idx + 1].season_number, 1);
+    } else {
+      if (episode > 1) goToEpisode(season, episode - 1);
+      else if (idx > 0) {
+        const prev = list[idx - 1];
+        goToEpisode(prev.season_number, prev.episode_count || 1);
+      }
+    }
+  };
+  const canPrev = (() => {
+    if (type !== "tv" || !details?.seasonList?.length) return false;
+    const list = details.seasonList;
+    const idx = list.findIndex((sn) => sn.season_number === season);
+    return episode > 1 || idx > 0;
+  })();
+  const canNext = (() => {
+    if (type !== "tv" || !details?.seasonList?.length) return false;
+    const list = details.seasonList;
+    const idx = list.findIndex((sn) => sn.season_number === season);
+    if (idx === -1) return false;
+    const epCount = list[idx]?.episode_count ?? 1;
+    return episode < epCount || idx < list.length - 1;
+  })();
 
   const title = details?.title || `${type === "tv" ? "TV" : "Movie"} · ${id}`;
   const year = details?.year;
@@ -200,6 +289,10 @@ export function Detail({ type, id }: { type: "movie" | "tv"; id: string }) {
                   episode={episode}
                   onSeason={onSeasonPicked}
                   onEpisode={onEpisodePicked}
+                  onPrev={() => stepEpisode(-1)}
+                  onNext={() => stepEpisode(1)}
+                  canPrev={canPrev}
+                  canNext={canNext}
                 />
               )}
             </div>
@@ -240,11 +333,20 @@ export function Detail({ type, id }: { type: "movie" | "tv"; id: string }) {
               allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
               allowFullScreen
               referrerPolicy="no-referrer"
+              onLoad={() => { loadedCountRef.current += 1; }}
             />
             {roomCode && (
               <Room
                 roomCode={roomCode}
-                mediaUrl={pathname + (type === "tv" ? `?room=${roomCode}` : `?room=${roomCode}`)}
+                mediaUrl={(() => {
+                  const sp = new URLSearchParams();
+                  if (type === "tv") {
+                    sp.set("s", String(season));
+                    sp.set("e", String(episode));
+                  }
+                  sp.set("room", roomCode);
+                  return `${pathname}?${sp.toString()}`;
+                })()}
                 iframeRef={iframeRef}
                 onLeave={() => {
                   const sp = new URLSearchParams(searchParams.toString());
@@ -423,13 +525,17 @@ function DetailSkeleton({ type }: { type: "movie" | "tv" }) {
 }
 
 function SeasonPicker({
-  seasonList, season, episode, onSeason, onEpisode,
+  seasonList, season, episode, onSeason, onEpisode, onPrev, onNext, canPrev, canNext,
 }: {
   seasonList: { season_number: number; episode_count: number; name: string }[];
   season: number;
   episode: number;
   onSeason: (s: number) => void;
   onEpisode: (e: number) => void;
+  onPrev: () => void;
+  onNext: () => void;
+  canPrev: boolean;
+  canNext: boolean;
 }) {
   const current = seasonList.find((s) => s.season_number === season) ?? seasonList[0];
   const epCount = current?.episode_count ?? 1;
@@ -452,6 +558,10 @@ function SeasonPicker({
             <option key={n} value={n}>Episode {n}</option>
           ))}
         </select>
+      </div>
+      <div className="se-step">
+        <button type="button" className="ghost-sm" onClick={onPrev} disabled={!canPrev} aria-label="Previous episode" title="Previous episode">‹ Prev</button>
+        <button type="button" className="ghost-sm" onClick={onNext} disabled={!canNext} aria-label="Next episode" title="Next episode">Next ›</button>
       </div>
     </div>
   );

@@ -285,7 +285,7 @@ export function Room({ roomCode, mediaUrl, iframeRef, onLeave }: Props) {
               </button>
             </div>
           </div>
-          <div className={`room-status ${connected ? "ok" : ""}`}>{connected ? "Live" : "Connecting…"}</div>
+          {!connected && <div className="room-status">Connecting…</div>}
         </div>
 
         <div className="room-identity">
@@ -329,7 +329,7 @@ export function Room({ roomCode, mediaUrl, iframeRef, onLeave }: Props) {
           <div className="room-chat-log" ref={chatLogRef}>
             {chat.map((c, i) => (
               <div key={i} className={`chat-msg ${c.from === "—" ? "system" : ""}`}>
-                {c.from === "—" ? <em>{c.text}</em> : <><strong>{c.from}:</strong> {c.text}</>}
+                {c.from === "—" ? <em>{c.text}</em> : <><strong style={{ color: nameColor(c.from) }}>{c.from}:</strong> {c.text}</>}
               </div>
             ))}
           </div>
@@ -379,9 +379,22 @@ export function Room({ roomCode, mediaUrl, iframeRef, onLeave }: Props) {
   );
 }
 
+const NAME_COLORS = [
+  "#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16",
+  "#22c55e", "#10b981", "#14b8a6", "#06b6d4", "#0ea5e9",
+  "#3b82f6", "#6366f1", "#8b5cf6", "#a855f7", "#d946ef",
+  "#ec4899", "#f43f5e",
+];
+function nameColor(name: string) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
+  return NAME_COLORS[Math.abs(h) % NAME_COLORS.length];
+}
+
 function addRoomToUrl(path: string, code: string) {
   const [base, query = ""] = path.split("?");
   const sp = new URLSearchParams(query);
+  sp.delete("room");
   sp.set("room", code);
   return `${base}?${sp.toString()}`;
 }
