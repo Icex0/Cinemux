@@ -7,6 +7,7 @@
 #
 # Variables consumed at RUNTIME (just `docker compose up -d`):
 #   TMDB_API_KEY (required)
+#   GIPHY_API_KEY (optional — enables the chat GIF picker)
 #   ROOM_ALLOWED_ORIGINS
 #   WEB_PORT, ROOM_PORT (host ports)
 
@@ -38,6 +39,7 @@ services:
       - "${WEB_PORT:-3000}:3000"
     environment:
       TMDB_API_KEY: ${TMDB_API_KEY:?TMDB_API_KEY is required}
+      GIPHY_API_KEY: ${GIPHY_API_KEY:-}
       NODE_ENV: production
     restart: unless-stopped
     healthcheck:

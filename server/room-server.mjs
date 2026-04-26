@@ -149,6 +149,17 @@ wss.on("connection", (ws) => {
     if (msg.type === "chat") {
       const text = String(msg.text || "").slice(0, 500).trim();
       if (!text) return;
+      // GIF messages: validate URL is from a known GIPHY CDN host before broadcasting.
+      if (text.startsWith("[gif]")) {
+        const url = text.slice(5);
+        try {
+          const u = new URL(url);
+          const ok = u.protocol === "https:" && /(^|\.)giphy\.com$/.test(u.hostname);
+          if (!ok) return;
+        } catch {
+          return;
+        }
+      }
       const me = room.members.get(memberId);
       const chatMsg = { from: me?.name || "Guest", text, ts: Date.now() };
       room.chat.push(chatMsg);

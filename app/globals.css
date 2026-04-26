@@ -422,6 +422,56 @@ h2::before {
   min-width: 38px;
 }
 .room-chat-form button:disabled { opacity: .4; cursor: not-allowed; }
+.room-chat-form .chat-gif-btn {
+  background: rgba(255,255,255,.06); color: var(--muted);
+}
+.room-chat-form .chat-gif-btn:hover { background: rgba(255,255,255,.12); color: var(--text); }
+
+.chat-gif-wrap { margin-top: 4px; }
+.chat-gif {
+  max-width: 100%; max-height: 200px; border-radius: 6px;
+  display: block; background: rgba(0,0,0,.3);
+}
+
+.room-chat { position: relative; }
+.gif-picker {
+  position: absolute; left: 0; right: 0; bottom: 44px;
+  background: #14181d; border: 1px solid rgba(255,255,255,.10);
+  border-radius: 8px; padding: 8px;
+  display: flex; flex-direction: column; gap: 8px;
+  z-index: 5;
+  box-shadow: 0 12px 24px rgba(0,0,0,.4);
+}
+.gif-picker-input {
+  background: rgba(0,0,0,.35); color: var(--text);
+  border: 1px solid rgba(255,255,255,.08); border-radius: 6px;
+  padding: 7px 10px; font: inherit; font-size: 12px;
+}
+.gif-picker-input:focus { outline: none; border-color: var(--accent); }
+.gif-picker-grid {
+  max-height: 320px; overflow-y: auto; overflow-x: hidden;
+}
+.gif-picker-grid-inner {
+  column-count: 2; column-gap: 4px;
+}
+.gif-picker-item {
+  border: 0; padding: 0; background: rgba(0,0,0,.3); cursor: pointer;
+  border-radius: 4px; overflow: hidden;
+  display: block; width: 100%; margin: 0 0 4px;
+  break-inside: avoid;
+  transition: outline-color .12s ease;
+  outline: 2px solid transparent;
+}
+.gif-picker-item:hover { outline-color: var(--accent); }
+.gif-picker-item img { width: 100%; height: auto; display: block; }
+.gif-picker-state {
+  grid-column: 1 / -1; padding: 24px 0; text-align: center;
+  color: var(--muted); font-size: 12px;
+}
+.gif-picker-attribution {
+  font-size: 10px; color: var(--muted); text-align: right;
+  letter-spacing: .5px; text-transform: uppercase;
+}
 
 /* Spotlight hero (home) */
 .spotlight-wrap {

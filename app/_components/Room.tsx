@@ -11,7 +11,7 @@ import {
 } from "@/lib/room";
 import { ALPHA_PROVIDER } from "@/lib/providers";
 import { Dialog } from "./Dialog";
-import { Check, Copy, LogOut, Send } from "lucide-react";
+import { Check, Copy, LogOut, Send, Image as ImageIcon } from "lucide-react";
 
 const WS_URL = process.env.NEXT_PUBLIC_ROOM_WS_URL || "ws://localhost:3001";
 // Watch-party sync uses the canonical (Alpha) provider's origin for postMessage.
@@ -38,6 +38,7 @@ export function Room({ roomCode, mediaUrl, iframeRef, onLeave }: Props) {
   const [draftName, setDraftName] = useState("");
   const [collapsed, setCollapsed] = useState(false);
   const [justCopied, setJustCopied] = useState(false);
+  const [gifPickerOpen, setGifPickerOpen] = useState(false);
   const isHostRef = useRef(false);
   const lastBroadcastRef = useRef({ playing: false, time: 0, ts: 0 });
   const suppressUntilRef = useRef(0); // ignore PLAYER_EVENTs caused by remote actions
@@ -238,6 +239,13 @@ export function Room({ roomCode, mediaUrl, iframeRef, onLeave }: Props) {
     ws.send(JSON.stringify(m));
     setDraft("");
   };
+  const sendGif = (url: string) => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== 1) return;
+    const m: ClientMsg = { type: "chat", text: `[gif]${url}` };
+    ws.send(JSON.stringify(m));
+    setGifPickerOpen(false);
+  };
 
   const inviteUrl = typeof window !== "undefined"
     ? `${window.location.origin}${addRoomToUrl(mediaUrl, roomCode)}`
@@ -329,11 +337,28 @@ export function Room({ roomCode, mediaUrl, iframeRef, onLeave }: Props) {
           <div className="room-chat-log" ref={chatLogRef}>
             {chat.map((c, i) => (
               <div key={i} className={`chat-msg ${c.from === "—" ? "system" : ""}`}>
-                {c.from === "—" ? <em>{c.text}</em> : <><strong style={{ color: nameColor(c.from) }}>{c.from}:</strong> {c.text}</>}
+                {c.from === "—"
+                  ? <em>{c.text}</em>
+                  : c.text.startsWith("[gif]")
+                    ? <>
+                        <strong style={{ color: nameColor(c.from) }}>{c.from}:</strong>
+                        <div className="chat-gif-wrap"><img className="chat-gif" src={c.text.slice(5)} alt="gif" loading="lazy" /></div>
+                      </>
+                    : <><strong style={{ color: nameColor(c.from) }}>{c.from}:</strong> {c.text}</>}
               </div>
             ))}
           </div>
+          {gifPickerOpen && <GifPicker onPick={sendGif} onClose={() => setGifPickerOpen(false)} />}
           <form className="room-chat-form" onSubmit={(e) => { e.preventDefault(); sendChat(); }}>
+            <button
+              type="button"
+              className="chat-gif-btn"
+              onClick={() => setGifPickerOpen((v) => !v)}
+              aria-label="Send a GIF"
+              title="Send a GIF"
+            >
+              <ImageIcon size={14} />
+            </button>
             <input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
@@ -376,6 +401,89 @@ export function Room({ roomCode, mediaUrl, iframeRef, onLeave }: Props) {
         </form>
       </Dialog>
     </aside>
+  );
+}
+
+type GifResult = { id: string; title: string; preview: string; url: string };
+
+function GifPicker({ onPick, onClose }: { onPick: (url: string) => void; onClose: () => void }) {
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState<GifResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const debounceRef = useRef<number | null>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    setLoading(true);
+    setError(null);
+    debounceRef.current = window.setTimeout(async () => {
+      try {
+        const r = await fetch(`/api/giphy/search?q=${encodeURIComponent(q)}`);
+        if (!r.ok) {
+          const j = await r.json().catch(() => ({}));
+          setError(j.error === "GIPHY_API_KEY not configured" ? "GIPHY not configured on the server." : "Couldn't load GIFs.");
+          setResults([]);
+        } else {
+          const j = await r.json();
+          setResults(j.results || []);
+        }
+      } catch {
+        setError("Couldn't load GIFs.");
+      } finally {
+        setLoading(false);
+      }
+    }, 300);
+    return () => { if (debounceRef.current) window.clearTimeout(debounceRef.current); };
+  }, [q]);
+
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) onClose();
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  return (
+    <div className="gif-picker" ref={wrapRef}>
+      <input
+        className="gif-picker-input"
+        autoFocus
+        placeholder="Search GIPHY…"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+      />
+      <div className="gif-picker-grid">
+        {error && <div className="gif-picker-state">{error}</div>}
+        {!error && loading && results.length === 0 && <div className="gif-picker-state">Loading…</div>}
+        {!error && !loading && results.length === 0 && <div className="gif-picker-state">No results</div>}
+        {results.length > 0 && (
+          <div className="gif-picker-grid-inner">
+            {results.map((g) => (
+              <button
+                key={g.id}
+                type="button"
+                className="gif-picker-item"
+                onClick={() => onPick(g.url)}
+                title={g.title}
+              >
+                <img src={g.preview} alt={g.title} loading="lazy" />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="gif-picker-attribution">Powered by GIPHY</div>
+    </div>
   );
 }
 
