@@ -1,0 +1,75 @@
+# syntax=docker/dockerfile:1.7
+
+# ── Stage 1: install deps + build Next ───────────────────────────────
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+# Ensure public/ exists even if the project doesn't have one (Next is happy
+# with an empty dir; the runner stage's COPY would fail otherwise).
+RUN mkdir -p public
+
+# NEXT_PUBLIC_* values are inlined into the client bundle at build time,
+# so they must be passed as build args (not runtime envs) to take effect.
+# Declare every public var the app reads; defaults are empty so omitted
+# providers stay hidden from the source switcher.
+ARG NEXT_PUBLIC_ROOM_WS_URL=ws://localhost:3001
+ARG NEXT_PUBLIC_PROVIDER_ALPHA_NAME=
+ARG NEXT_PUBLIC_PROVIDER_ALPHA_ORIGIN=
+ARG NEXT_PUBLIC_PROVIDER_ALPHA_MOVIE=
+ARG NEXT_PUBLIC_PROVIDER_ALPHA_TV=
+ARG NEXT_PUBLIC_PROVIDER_BETA_NAME=
+ARG NEXT_PUBLIC_PROVIDER_BETA_ORIGIN=
+ARG NEXT_PUBLIC_PROVIDER_BETA_MOVIE=
+ARG NEXT_PUBLIC_PROVIDER_BETA_TV=
+ARG NEXT_PUBLIC_PROVIDER_GAMMA_NAME=
+ARG NEXT_PUBLIC_PROVIDER_GAMMA_ORIGIN=
+ARG NEXT_PUBLIC_PROVIDER_GAMMA_MOVIE=
+ARG NEXT_PUBLIC_PROVIDER_GAMMA_TV=
+ARG NEXT_PUBLIC_PROVIDER_DELTA_NAME=
+ARG NEXT_PUBLIC_PROVIDER_DELTA_ORIGIN=
+ARG NEXT_PUBLIC_PROVIDER_DELTA_MOVIE=
+ARG NEXT_PUBLIC_PROVIDER_DELTA_TV=
+
+ENV NEXT_PUBLIC_ROOM_WS_URL=$NEXT_PUBLIC_ROOM_WS_URL \
+    NEXT_PUBLIC_PROVIDER_ALPHA_NAME=$NEXT_PUBLIC_PROVIDER_ALPHA_NAME \
+    NEXT_PUBLIC_PROVIDER_ALPHA_ORIGIN=$NEXT_PUBLIC_PROVIDER_ALPHA_ORIGIN \
+    NEXT_PUBLIC_PROVIDER_ALPHA_MOVIE=$NEXT_PUBLIC_PROVIDER_ALPHA_MOVIE \
+    NEXT_PUBLIC_PROVIDER_ALPHA_TV=$NEXT_PUBLIC_PROVIDER_ALPHA_TV \
+    NEXT_PUBLIC_PROVIDER_BETA_NAME=$NEXT_PUBLIC_PROVIDER_BETA_NAME \
+    NEXT_PUBLIC_PROVIDER_BETA_ORIGIN=$NEXT_PUBLIC_PROVIDER_BETA_ORIGIN \
+    NEXT_PUBLIC_PROVIDER_BETA_MOVIE=$NEXT_PUBLIC_PROVIDER_BETA_MOVIE \
+    NEXT_PUBLIC_PROVIDER_BETA_TV=$NEXT_PUBLIC_PROVIDER_BETA_TV \
+    NEXT_PUBLIC_PROVIDER_GAMMA_NAME=$NEXT_PUBLIC_PROVIDER_GAMMA_NAME \
+    NEXT_PUBLIC_PROVIDER_GAMMA_ORIGIN=$NEXT_PUBLIC_PROVIDER_GAMMA_ORIGIN \
+    NEXT_PUBLIC_PROVIDER_GAMMA_MOVIE=$NEXT_PUBLIC_PROVIDER_GAMMA_MOVIE \
+    NEXT_PUBLIC_PROVIDER_GAMMA_TV=$NEXT_PUBLIC_PROVIDER_GAMMA_TV \
+    NEXT_PUBLIC_PROVIDER_DELTA_NAME=$NEXT_PUBLIC_PROVIDER_DELTA_NAME \
+    NEXT_PUBLIC_PROVIDER_DELTA_ORIGIN=$NEXT_PUBLIC_PROVIDER_DELTA_ORIGIN \
+    NEXT_PUBLIC_PROVIDER_DELTA_MOVIE=$NEXT_PUBLIC_PROVIDER_DELTA_MOVIE \
+    NEXT_PUBLIC_PROVIDER_DELTA_TV=$NEXT_PUBLIC_PROVIDER_DELTA_TV
+
+RUN npm run build
+
+# ── Stage 2: production runtime ──────────────────────────────────────
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+
+# Production-only deps to keep the image lean.
+COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/server ./server
+COPY --from=builder /app/next.config.mjs ./
+
+# Drop privileges.
+RUN addgroup -S app && adduser -S app -G app && chown -R app:app /app
+USER app
+
+EXPOSE 3000 3001

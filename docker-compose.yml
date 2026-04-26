@@ -1,0 +1,64 @@
+# Compose reads variable defaults from a `.env` file in this directory.
+# Copy `.env.example` to `.env` and fill in your values, then `docker compose up -d`.
+#
+# Variables consumed at BUILD time (changes need `docker compose up --build`):
+#   NEXT_PUBLIC_ROOM_WS_URL
+#   NEXT_PUBLIC_PROVIDER_{ALPHA,BETA,GAMMA,DELTA}_{NAME,ORIGIN,MOVIE,TV}
+#
+# Variables consumed at RUNTIME (just `docker compose up -d`):
+#   TMDB_API_KEY (required)
+#   ROOM_ALLOWED_ORIGINS
+#   WEB_PORT, ROOM_PORT (host ports)
+
+services:
+  web:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_ROOM_WS_URL: ${NEXT_PUBLIC_ROOM_WS_URL:-ws://localhost:3001}
+        NEXT_PUBLIC_PROVIDER_ALPHA_NAME: ${NEXT_PUBLIC_PROVIDER_ALPHA_NAME:-}
+        NEXT_PUBLIC_PROVIDER_ALPHA_ORIGIN: ${NEXT_PUBLIC_PROVIDER_ALPHA_ORIGIN:-}
+        NEXT_PUBLIC_PROVIDER_ALPHA_MOVIE: ${NEXT_PUBLIC_PROVIDER_ALPHA_MOVIE:-}
+        NEXT_PUBLIC_PROVIDER_ALPHA_TV: ${NEXT_PUBLIC_PROVIDER_ALPHA_TV:-}
+        NEXT_PUBLIC_PROVIDER_BETA_NAME: ${NEXT_PUBLIC_PROVIDER_BETA_NAME:-}
+        NEXT_PUBLIC_PROVIDER_BETA_ORIGIN: ${NEXT_PUBLIC_PROVIDER_BETA_ORIGIN:-}
+        NEXT_PUBLIC_PROVIDER_BETA_MOVIE: ${NEXT_PUBLIC_PROVIDER_BETA_MOVIE:-}
+        NEXT_PUBLIC_PROVIDER_BETA_TV: ${NEXT_PUBLIC_PROVIDER_BETA_TV:-}
+        NEXT_PUBLIC_PROVIDER_GAMMA_NAME: ${NEXT_PUBLIC_PROVIDER_GAMMA_NAME:-}
+        NEXT_PUBLIC_PROVIDER_GAMMA_ORIGIN: ${NEXT_PUBLIC_PROVIDER_GAMMA_ORIGIN:-}
+        NEXT_PUBLIC_PROVIDER_GAMMA_MOVIE: ${NEXT_PUBLIC_PROVIDER_GAMMA_MOVIE:-}
+        NEXT_PUBLIC_PROVIDER_GAMMA_TV: ${NEXT_PUBLIC_PROVIDER_GAMMA_TV:-}
+        NEXT_PUBLIC_PROVIDER_DELTA_NAME: ${NEXT_PUBLIC_PROVIDER_DELTA_NAME:-}
+        NEXT_PUBLIC_PROVIDER_DELTA_ORIGIN: ${NEXT_PUBLIC_PROVIDER_DELTA_ORIGIN:-}
+        NEXT_PUBLIC_PROVIDER_DELTA_MOVIE: ${NEXT_PUBLIC_PROVIDER_DELTA_MOVIE:-}
+        NEXT_PUBLIC_PROVIDER_DELTA_TV: ${NEXT_PUBLIC_PROVIDER_DELTA_TV:-}
+    image: cinemux:latest
+    command: ["npx", "next", "start", "-p", "3000"]
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    environment:
+      TMDB_API_KEY: ${TMDB_API_KEY:?TMDB_API_KEY is required}
+      NODE_ENV: production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # Reuses the image built by `web`. No `build:` here so we don't race
+  # to tag the same image from two services in parallel.
+  room:
+    image: cinemux:latest
+    command: ["node", "server/room-server.mjs"]
+    ports:
+      - "${ROOM_PORT:-3001}:3001"
+    environment:
+      ROOM_PORT: 3001
+      ROOM_ALLOWED_ORIGINS: ${ROOM_ALLOWED_ORIGINS:-*}
+      NODE_ENV: production
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_started

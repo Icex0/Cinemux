@@ -1,0 +1,15 @@
+node_modules
+.next
+.git
+.gitignore
+.env*
+!.env.example
+README.md
+Dockerfile
+docker-compose.yml
+*.log
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+.claude
