@@ -33,9 +33,9 @@ Edit the file and set:
 
 The provider templates use placeholders that get substituted at runtime: `{id}`, `{season}`, `{episode}`, `{startAt}`, `{sub}`. See `.env.example` for the full schema. **Cinemux ships with no embed sources** — `.env.example` has empty slots. A community-maintained default set is available at:
 
-> https://gist.githubusercontent.com/Icex0/97b3c0c78e8aa941694caf02fcd095f6/raw/gistfile1.txt
+> https://pastebin.com/pP95C0cA
 
-Open the URL in a browser, copy the lines, and paste them into your `.env.local` (or `.env`) on top of the empty slot stubs. Or fill in your own. Clear any slot's `MOVIE` and `TV` vars to hide it from the source switcher.
+Copy and paste them into your `.env.local` (or `.env`) or fill in your own. Clear any slot's `MOVIE` and `TV` vars to hide it from the source switcher.
 
 ### 2. Run it
 
@@ -158,5 +158,5 @@ host browser  ── WebSocket ──►  room-server.mjs (in-memory)  ◄──
 
 ## Notes
 - No database. Watch progress is per-browser; rooms are in-memory and evaporate when empty or when the room server restarts.
-- Free streaming embeds occasionally inject pop-under redirects on click; that behavior originates from the embed, not from this app. Use uBlock Origin.
+- Streaming embeds occasionally inject pop-under redirects on click; that behavior originates from the embed, not from this app. Use uBlock Origin.
 - Watch-party invite links are semi-secret. Anyone with the code can join. For private viewings, treat them like a meeting link.
