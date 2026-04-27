@@ -44,6 +44,7 @@ export function Detail({ type, id }: { type: "movie" | "tv"; id: string }) {
   const searchParams = useSearchParams();
   const roomCode = searchParams.get("room");
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const playerWrapRef = useRef<HTMLDivElement | null>(null);
 
   const [details, setDetails] = useState<Details | null>(null);
   const [showTrailer, setShowTrailer] = useState(false);
@@ -325,7 +326,7 @@ export function Detail({ type, id }: { type: "movie" | "tv"; id: string }) {
               </div>
             </div>
           )}
-          <div className={`player-wrap ${roomCode ? "in-room" : ""}`}>
+          <div ref={playerWrapRef} className={`player-wrap ${roomCode ? "in-room" : ""}`}>
             <iframe
               ref={iframeRef}
               key={providerId + ":" + src}
@@ -348,6 +349,7 @@ export function Detail({ type, id }: { type: "movie" | "tv"; id: string }) {
                   return `${pathname}?${sp.toString()}`;
                 })()}
                 iframeRef={iframeRef}
+                wrapRef={playerWrapRef}
                 onLeave={() => {
                   const sp = new URLSearchParams(searchParams.toString());
                   sp.delete("room");

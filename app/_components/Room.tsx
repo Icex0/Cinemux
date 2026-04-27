@@ -11,7 +11,7 @@ import {
 } from "@/lib/room";
 import { ALPHA_PROVIDER } from "@/lib/providers";
 import { Dialog } from "./Dialog";
-import { Check, Copy, LogOut, Send, Image as ImageIcon } from "lucide-react";
+import { Check, Copy, LogOut, Maximize2, Minimize2, Send, Image as ImageIcon } from "lucide-react";
 
 const WS_URL = process.env.NEXT_PUBLIC_ROOM_WS_URL || "ws://localhost:3001";
 // Watch-party sync uses the canonical (Alpha) provider's origin for postMessage.
@@ -22,10 +22,11 @@ type Props = {
   roomCode: string;
   mediaUrl: string;
   iframeRef: React.RefObject<HTMLIFrameElement | null>;
+  wrapRef: React.RefObject<HTMLDivElement | null>;
   onLeave: () => void;
 };
 
-export function Room({ roomCode, mediaUrl, iframeRef, onLeave }: Props) {
+export function Room({ roomCode, mediaUrl, iframeRef, wrapRef, onLeave }: Props) {
   const router = useRouter();
   const wsRef = useRef<WebSocket | null>(null);
   const [connected, setConnected] = useState(false);
@@ -39,6 +40,21 @@ export function Room({ roomCode, mediaUrl, iframeRef, onLeave }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [justCopied, setJustCopied] = useState(false);
   const [gifPickerOpen, setGifPickerOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(document.fullscreenElement === wrapRef.current);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, [wrapRef]);
+
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else if (wrapRef.current) {
+      wrapRef.current.requestFullscreen().catch(() => {});
+    }
+  };
   const isHostRef = useRef(false);
   const lastBroadcastRef = useRef({ playing: false, time: 0, ts: 0 });
   const suppressUntilRef = useRef(0); // ignore PLAYER_EVENTs caused by remote actions
@@ -279,8 +295,8 @@ export function Room({ roomCode, mediaUrl, iframeRef, onLeave }: Props) {
       </button>
       <div className="room-body">
         <div className="room-head">
-          <div className="room-head-main">
-            <div className="room-title">Watch Room</div>
+          <div className="room-title">Watch Room</div>
+          <div className="room-head-right">
             <div className="room-code-row">
               <span className="room-code">{roomCode}</span>
               <button
@@ -292,8 +308,17 @@ export function Room({ roomCode, mediaUrl, iframeRef, onLeave }: Props) {
                 {justCopied ? <Check size={14} /> : <Copy size={14} />}
               </button>
             </div>
+            {!connected && <div className="room-status">Connecting…</div>}
+            <button
+              type="button"
+              className="room-fs-btn"
+              onClick={toggleFullscreen}
+              title={isFullscreen ? "Exit fullscreen" : "Fullscreen with chat"}
+              aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+            >
+              {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+            </button>
           </div>
-          {!connected && <div className="room-status">Connecting…</div>}
         </div>
 
         <div className="room-identity">
@@ -307,8 +332,8 @@ export function Room({ roomCode, mediaUrl, iframeRef, onLeave }: Props) {
           </button>
         </div>
 
-        <div className="room-role">
-          {isHost ? "🎬 You are the host — your playback controls everyone." : "👥 Following the host."}
+        <div className={`room-role ${isHost ? "host" : ""}`}>
+          {isHost ? "You are the host — your playback controls everyone." : "Following the host"}
         </div>
 
         <div className="room-members">
@@ -342,7 +367,13 @@ export function Room({ roomCode, mediaUrl, iframeRef, onLeave }: Props) {
                   : c.text.startsWith("[gif]")
                     ? <>
                         <strong style={{ color: nameColor(c.from) }}>{c.from}:</strong>
-                        <div className="chat-gif-wrap"><img className="chat-gif" src={c.text.slice(5)} alt="gif" loading="lazy" /></div>
+                        <div className="chat-gif-wrap"><img
+                          className="chat-gif"
+                          src={c.text.slice(5)}
+                          alt="gif"
+                          loading="lazy"
+                          onLoad={() => { const el = chatLogRef.current; if (el) el.scrollTop = el.scrollHeight; }}
+                        /></div>
                       </>
                     : <><strong style={{ color: nameColor(c.from) }}>{c.from}:</strong> {c.text}</>}
               </div>

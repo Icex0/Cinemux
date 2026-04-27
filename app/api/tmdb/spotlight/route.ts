@@ -29,7 +29,7 @@ export async function GET() {
 
   const candidates = (tj.results ?? [])
     .filter((m: any) => (m.media_type === "movie" || m.media_type === "tv") && m.backdrop_path && m.overview)
-    .slice(0, 8);
+    .slice(0, 20);
 
   const enriched = await Promise.all(
     candidates.map(async (m: any) => {
@@ -46,7 +46,7 @@ export async function GET() {
           title: m.title || m.name,
           year: ((m.release_date || m.first_air_date) as string | undefined)?.slice(0, 4),
           poster: IMG(m.poster_path),
-          backdrop: IMG(m.backdrop_path, "w1280"),
+          backdrop: IMG(m.backdrop_path, "original"),
           overview: m.overview || null,
           rating: typeof m.vote_average === "number" ? Math.round(m.vote_average * 10) / 10 : undefined,
           logo: IMG(logoPath, "w500"),
@@ -58,7 +58,7 @@ export async function GET() {
           title: m.title || m.name,
           year: ((m.release_date || m.first_air_date) as string | undefined)?.slice(0, 4),
           poster: IMG(m.poster_path),
-          backdrop: IMG(m.backdrop_path, "w1280"),
+          backdrop: IMG(m.backdrop_path, "original"),
           overview: m.overview || null,
           rating: typeof m.vote_average === "number" ? Math.round(m.vote_average * 10) / 10 : undefined,
           logo: null,
@@ -67,5 +67,5 @@ export async function GET() {
     })
   );
 
-  return NextResponse.json({ results: enriched.slice(0, 6) });
+  return NextResponse.json({ results: enriched.slice(0, 20) });
 }
