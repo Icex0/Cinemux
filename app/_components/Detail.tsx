@@ -123,7 +123,9 @@ export function Detail({ type, id }: { type: "movie" | "tv"; id: string }) {
   }, [season, episode, type]);
 
   useEffect(() => {
-    setDetails(null);
+    // Don't reset to null on navigation — that would unmount the player section
+    // (and the Room sidebar with its WebSocket connection) until the new fetch returns.
+    // Keep the previous title's metadata visible briefly; swap when the new data lands.
     let cancel = false;
     fetch(`/api/tmdb/details?type=${type}&id=${id}`)
       .then((r) => (r.ok ? r.json() : null))
@@ -350,6 +352,10 @@ export function Detail({ type, id }: { type: "movie" | "tv"; id: string }) {
                 })()}
                 iframeRef={iframeRef}
                 wrapRef={playerWrapRef}
+                titleType={type}
+                onStepEpisode={stepEpisode}
+                canPrevEpisode={canPrev}
+                canNextEpisode={canNext}
                 onLeave={() => {
                   const sp = new URLSearchParams(searchParams.toString());
                   sp.delete("room");

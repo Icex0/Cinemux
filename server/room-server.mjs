@@ -84,20 +84,50 @@ wss.on("connection", (ws) => {
       if (!code) return;
       roomId = code;
 
+      const sessionId = String(msg.sessionId || "").slice(0, 64);
       let room = rooms.get(roomId);
       if (!room) {
         room = {
           hostId: memberId,
+          hostSessionId: sessionId,
           mediaUrl: String(msg.mediaUrl || "/"),
           state: { time: 0, paused: true, ts: Date.now() },
           members: new Map(),
           chat: [],
+          bannedSessions: new Set(),
+          pendingRequests: new Map(),
+          deleteTimer: null,
           createdAt: Date.now(),
         };
         rooms.set(roomId, room);
       }
+      // Cancel any pending empty-room deletion — someone is reconnecting.
+      if (room.deleteTimer) {
+        clearTimeout(room.deleteTimer);
+        room.deleteTimer = null;
+      }
       const name = String(msg.name || "Guest").slice(0, 32) || "Guest";
-      room.members.set(memberId, { ws, name });
+      // Reject if their session has been banned. Catches name changes, doesn't punish namesakes.
+      if (sessionId && room.bannedSessions.has(sessionId)) {
+        send(ws, { type: "banned" });
+        try { ws.close(1008, "banned"); } catch { /* ignore */ }
+        return;
+      }
+      room.members.set(memberId, { ws, name, sessionId });
+
+      // Reclaim host on reconnect: if this session was previously the host, restore them.
+      const reclaimedHost = sessionId && room.hostSessionId === sessionId;
+      const previousHostId = reclaimedHost && room.hostId !== memberId ? room.hostId : null;
+      // Adopt host if the slot is orphaned (current hostId isn't an actual member) and nobody reclaimed.
+      // This happens when everyone left during the grace period and a non-original-host joins first.
+      const adoptHost = !reclaimedHost && !room.members.has(room.hostId);
+      console.log("[room]", roomId, "JOIN", { name, sessionId: sessionId?.slice(0,8), hostSessionId: room.hostSessionId?.slice(0,8), reclaimedHost, adoptHost, currentHostId: room.hostId?.slice(0,8), newMemberId: memberId.slice(0,8), previousHostId: previousHostId?.slice(0,8) });
+      if (reclaimedHost) {
+        room.hostId = memberId;
+      } else if (adoptHost) {
+        room.hostId = memberId;
+        room.hostSessionId = sessionId;
+      }
 
       send(ws, {
         type: "joined",
@@ -109,6 +139,12 @@ wss.on("connection", (ws) => {
         chat: room.chat.slice(-50),
       });
       broadcast(room, { type: "members", members: memberList(room), joined: name }, memberId);
+      // If we just reclaimed host, demote the interim auto-promoted host (if still in the room).
+      if (previousHostId) {
+        const prev = room.members.get(previousHostId);
+        console.log("[room]", roomId, "DEMOTE prev host", { previousHostId: previousHostId.slice(0,8), found: !!prev });
+        if (prev) send(prev.ws, { type: "host_demoted" });
+      }
       return;
     }
 
@@ -169,13 +205,88 @@ wss.on("connection", (ws) => {
       return;
     }
 
+    if (msg.type === "request_action") {
+      if (isHost) return;
+      // One outstanding request PER USER — but multiple users can have one each.
+      if (room.pendingRequests.has(memberId)) return;
+      const kind = String(msg.kind || "");
+      if (!["pause", "episode", "media"].includes(kind)) return;
+      const raw = msg.payload || {};
+      let payload;
+      if (kind === "pause") {
+        payload = {};
+      } else if (kind === "episode") {
+        const delta = Number(raw.delta);
+        if (delta !== 1 && delta !== -1) return;
+        payload = { delta };
+      } else {
+        const mediaUrl = String(raw.mediaUrl || "").slice(0, 200);
+        const label = String(raw.label || "").slice(0, 120);
+        if (!mediaUrl.startsWith("/")) return;
+        if (!/^\/(movie|tv)\/\d+/.test(mediaUrl)) return;
+        if (!label) return;
+        payload = { mediaUrl, label };
+      }
+      const me = room.members.get(memberId);
+      if (!me) return;
+      const host = room.members.get(room.hostId);
+      if (!host) return;
+      const expiresAt = Date.now() + 60_000;
+      const timeoutId = setTimeout(() => {
+        if (!room.pendingRequests.has(memberId)) return;
+        room.pendingRequests.delete(memberId);
+        const h = room.members.get(room.hostId);
+        if (h) send(h.ws, { type: "request_clear", fromId: memberId });
+        const r = room.members.get(memberId);
+        if (r) send(r.ws, { type: "request_resolved", approved: false, expired: true });
+      }, 60_000);
+      room.pendingRequests.set(memberId, { fromId: memberId, fromName: me.name, kind, payload, expiresAt, timeoutId });
+      send(host.ws, { type: "request_pending", fromId: memberId, fromName: me.name, kind, payload, expiresAt });
+      return;
+    }
+
+    if (msg.type === "respond_action" && isHost) {
+      const targetId = String(msg.targetId || "");
+      const pending = room.pendingRequests.get(targetId);
+      if (!pending) return;
+      clearTimeout(pending.timeoutId);
+      room.pendingRequests.delete(targetId);
+      const requester = room.members.get(targetId);
+      if (requester) send(requester.ws, { type: "request_resolved", approved: !!msg.approve });
+      return;
+    }
+
+    if (msg.type === "ban" && isHost) {
+      const targetId = String(msg.targetId || "");
+      if (!room.members.has(targetId) || targetId === memberId) return;
+      const target = room.members.get(targetId);
+      // Ban by session id, not name — avoids namesake false positives.
+      // Defeated by clearing localStorage / incognito; that's the documented tradeoff.
+      if (target?.sessionId) room.bannedSessions.add(target.sessionId);
+      try { send(target.ws, { type: "banned" }); } catch { /* ignore */ }
+      try { target.ws.close(1008, "banned"); } catch { /* ignore */ }
+      return;
+    }
+
     if (msg.type === "promote" && isHost) {
       const targetId = String(msg.targetId || "");
       if (!room.members.has(targetId) || targetId === memberId) return;
       room.hostId = targetId;
       const newHost = room.members.get(targetId);
+      room.hostSessionId = newHost.sessionId || "";
       send(newHost.ws, { type: "host_promoted" });
       send(ws, { type: "host_demoted" });
+      // Forward all active requests to the new host so they don't disappear.
+      for (const req of room.pendingRequests.values()) {
+        send(newHost.ws, {
+          type: "request_pending",
+          fromId: req.fromId,
+          fromName: req.fromName,
+          kind: req.kind,
+          payload: req.payload,
+          expiresAt: req.expiresAt,
+        });
+      }
       broadcast(room, { type: "members", members: memberList(room) });
       return;
     }
@@ -185,16 +296,45 @@ wss.on("connection", (ws) => {
     const room = rooms.get(roomId);
     if (!room) return;
     const me = room.members.get(memberId);
+    console.log("[room]", roomId, "CLOSE", { memberId: memberId.slice(0,8), wasHost: room.hostId === memberId, name: me?.name });
     room.members.delete(memberId);
 
+    // If the disconnecting user had an outstanding request, clear it (the host's notification too).
+    const myRequest = room.pendingRequests.get(memberId);
+    if (myRequest) {
+      clearTimeout(myRequest.timeoutId);
+      room.pendingRequests.delete(memberId);
+      const host = room.members.get(room.hostId);
+      if (host) send(host.ws, { type: "request_clear", fromId: memberId });
+    }
+
     if (room.members.size === 0) {
-      rooms.delete(roomId);
+      // Don't delete immediately — clients reconnecting after a cross-route navigation
+      // (host approving a media suggestion, etc.) close their old WS before opening a new one.
+      // A brief grace period lets them rejoin the SAME room and reclaim host via sessionId.
+      if (room.deleteTimer) clearTimeout(room.deleteTimer);
+      room.deleteTimer = setTimeout(() => {
+        const r = rooms.get(roomId);
+        if (r && r.members.size === 0) rooms.delete(roomId);
+      }, 5 * 60_000);
       return;
     }
     if (room.hostId === memberId) {
       const newHostId = room.members.keys().next().value;
       room.hostId = newHostId;
+      console.log("[room]", roomId, "AUTO-PROMOTE on host close", { from: memberId.slice(0,8), to: newHostId?.slice(0,8) });
       send(room.members.get(newHostId).ws, { type: "host_promoted" });
+      // New host inherits all active request notifications.
+      for (const req of room.pendingRequests.values()) {
+        send(room.members.get(newHostId).ws, {
+          type: "request_pending",
+          fromId: req.fromId,
+          fromName: req.fromName,
+          kind: req.kind,
+          payload: req.payload,
+          expiresAt: req.expiresAt,
+        });
+      }
     }
     broadcast(room, { type: "members", members: memberList(room), left: me?.name || "Guest" });
   });
