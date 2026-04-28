@@ -121,7 +121,6 @@ wss.on("connection", (ws) => {
       // Adopt host if the slot is orphaned (current hostId isn't an actual member) and nobody reclaimed.
       // This happens when everyone left during the grace period and a non-original-host joins first.
       const adoptHost = !reclaimedHost && !room.members.has(room.hostId);
-      console.log("[room]", roomId, "JOIN", { name, sessionId: sessionId?.slice(0,8), hostSessionId: room.hostSessionId?.slice(0,8), reclaimedHost, adoptHost, currentHostId: room.hostId?.slice(0,8), newMemberId: memberId.slice(0,8), previousHostId: previousHostId?.slice(0,8) });
       if (reclaimedHost) {
         room.hostId = memberId;
       } else if (adoptHost) {
@@ -142,7 +141,6 @@ wss.on("connection", (ws) => {
       // If we just reclaimed host, demote the interim auto-promoted host (if still in the room).
       if (previousHostId) {
         const prev = room.members.get(previousHostId);
-        console.log("[room]", roomId, "DEMOTE prev host", { previousHostId: previousHostId.slice(0,8), found: !!prev });
         if (prev) send(prev.ws, { type: "host_demoted" });
       }
       return;
@@ -296,7 +294,6 @@ wss.on("connection", (ws) => {
     const room = rooms.get(roomId);
     if (!room) return;
     const me = room.members.get(memberId);
-    console.log("[room]", roomId, "CLOSE", { memberId: memberId.slice(0,8), wasHost: room.hostId === memberId, name: me?.name });
     room.members.delete(memberId);
 
     // If the disconnecting user had an outstanding request, clear it (the host's notification too).
@@ -322,7 +319,6 @@ wss.on("connection", (ws) => {
     if (room.hostId === memberId) {
       const newHostId = room.members.keys().next().value;
       room.hostId = newHostId;
-      console.log("[room]", roomId, "AUTO-PROMOTE on host close", { from: memberId.slice(0,8), to: newHostId?.slice(0,8) });
       send(room.members.get(newHostId).ws, { type: "host_promoted" });
       // New host inherits all active request notifications.
       for (const req of room.pendingRequests.values()) {

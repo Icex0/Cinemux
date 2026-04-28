@@ -30,6 +30,7 @@ Edit the file and set:
 | `NEXT_PUBLIC_PROVIDER_{BETA,GAMMA,DELTA}_*` | optional | Additional fallback providers |
 | `NEXT_PUBLIC_ROOM_WS_URL` | optional | WebSocket URL for watch parties; defaults to `ws://localhost:3001` |
 | `ROOM_ALLOWED_ORIGINS` | optional | Origin allowlist for the room server (default `*`) |
+| `GIPHY_API_KEY` | optional | Enables the chat GIF picker. Free key from https://developers.giphy.com |
 
 The provider templates use placeholders that get substituted at runtime: `{id}`, `{season}`, `{episode}`, `{startAt}`, `{sub}`. See `.env.example` for the full schema. **Cinemux ships with no embed sources** — `.env.example` has empty slots. A community-maintained default set is available at:
 
@@ -68,9 +69,34 @@ Open http://localhost:3000. Stop with `docker compose down`.
 | `WEB_PORT` | 3000 | Host port for the web service |
 | `ROOM_PORT` | 3001 | Host port for the room service |
 | `NEXT_PUBLIC_*` (any) | — | **Build-time.** Changes require `docker compose up --build`. |
-| `TMDB_API_KEY`, `ROOM_ALLOWED_ORIGINS` | — | **Runtime.** Change in `.env`, just `docker compose up -d`. |
+| `TMDB_API_KEY`, `GIPHY_API_KEY`, `ROOM_ALLOWED_ORIGINS` | — | **Runtime.** Change in `.env`, just `docker compose up -d`. |
 
 The image runs as non-root `app`. Production deployments should put a reverse proxy with TLS in front, set `NEXT_PUBLIC_ROOM_WS_URL=wss://...`, and replace the `ROOM_ALLOWED_ORIGINS=*` default with explicit domains.
+
+##### Optional: built-in Caddy reverse proxy
+
+Compose ships a Caddy service that puts everything behind a single origin (web at `/`, room WS at `/ws`). Opt in with the `proxy` profile:
+
+```bash
+# Local — HTTP only on :80
+docker compose --profile proxy up -d --build
+
+# Production with auto Let's Encrypt cert
+SITE_ADDRESS=cinemux.example.com docker compose --profile proxy up -d --build
+```
+
+| Var | Default | Effect |
+|---|---|---|
+| `SITE_ADDRESS` | `:80` | Caddy site key. `:80` = HTTP-only, any Host. A real domain → auto-HTTPS. |
+
+When Caddy is in front, point the client at the proxied WebSocket path:
+
+```
+NEXT_PUBLIC_ROOM_WS_URL=ws://localhost/ws        # local
+NEXT_PUBLIC_ROOM_WS_URL=wss://cinemux.example.com/ws   # prod
+```
+
+`NEXT_PUBLIC_*` is build-time, so re-run with `--build` after changing it.
 
 ### 3. (Optional) Sharing on the public internet via ngrok
 

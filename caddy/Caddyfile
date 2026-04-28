@@ -1,0 +1,29 @@
+# Caddy front-door for Cinemux.
+#
+# Routes:
+#   /ws/*  → room WebSocket relay (room:3001)
+#   /*     → Next.js web app (web:3000)
+#
+# Modes (controlled by the SITE_ADDRESS env var):
+#   unset / ":80"          → HTTP-only on port 80, matches any Host. Use for localhost / docker dev.
+#   "yourdomain.com"       → Caddy auto-issues a Let's Encrypt cert and serves HTTPS.
+#                            Plain HTTP on :80 is automatically redirected to HTTPS.
+#
+# Client config when Caddy is in front:
+#   NEXT_PUBLIC_ROOM_WS_URL=ws://localhost/ws        (dev, SITE_ADDRESS=:80)
+#   NEXT_PUBLIC_ROOM_WS_URL=wss://yourdomain.com/ws  (prod)
+
+{$SITE_ADDRESS::80} {
+	encode gzip
+
+	# WebSocket upgrades for the room relay. Match both /ws and /ws/*; strip the /ws
+	# prefix so the room server (which listens at "/") sees a clean path.
+	@ws path /ws /ws/*
+	handle @ws {
+		uri strip_prefix /ws
+		reverse_proxy room:3001
+	}
+
+	# Everything else → Next.js
+	reverse_proxy web:3000
+}

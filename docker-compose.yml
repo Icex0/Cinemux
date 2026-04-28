@@ -10,6 +10,11 @@
 #   GIPHY_API_KEY (optional — enables the chat GIF picker)
 #   ROOM_ALLOWED_ORIGINS
 #   WEB_PORT, ROOM_PORT (host ports)
+#
+# Optional Caddy reverse proxy (TLS + single-origin routing for /ws):
+#   docker compose --profile proxy up -d --build
+#   Default is HTTP-only on :80 (good for local docker/ngrok). For production
+#   with auto-HTTPS, set SITE_ADDRESS=yourdomain.com in .env.
 
 services:
   web:
@@ -64,3 +69,28 @@ services:
     depends_on:
       web:
         condition: service_started
+
+  # Optional reverse proxy. Only starts with `--profile proxy`.
+  # With Caddy in front, the browser hits a single origin and you get TLS for free.
+  caddy:
+    profiles: ["proxy"]
+    image: caddy:2-alpine
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    environment:
+      # Caddy site address. Leave unset (or ":80") for HTTP-only local dev.
+      # Set to a real domain (e.g. "cinemux.example.com") for auto-HTTPS in prod.
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+    depends_on:
+      - web
+      - room
+
+volumes:
+  caddy_data:
+  caddy_config:
