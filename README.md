@@ -103,9 +103,37 @@ NEXT_PUBLIC_ROOM_WS_URL=wss://cinemux.example.com/ws   # prod
 <details>
 <summary>Click to expand — quick way to invite someone to a watch party from your laptop</summary>
 
-Both the web app (3000) and the WS relay (3001) need public reachability. Free ngrok supports multiple tunnels through a config file.
+Both the web app (3000) and the WS relay (3001) need public reachability. There are two ways to do this — pick the one that matches your ngrok plan.
 
-1. Add an authtoken once:
+#### Option A — single domain through Caddy (free tier with static `.dev`, recommended)
+
+Free ngrok now gives you **one** reserved `.ngrok-free.dev` domain. Multi-tunnel-on-different-hostnames isn't possible without paying, so route both web and WS through Caddy on port 80 — Caddy serves the app at `/` and proxies the WS at `/ws`, so one domain covers everything.
+
+1. Authtoken once:
+   ```
+   ngrok config add-authtoken <token>
+   ```
+2. Set the WS URL to your reserved domain + `/ws` in `.env` (build-time var — must be set *before* the build):
+   ```
+   NEXT_PUBLIC_ROOM_WS_URL=wss://<your-name>.ngrok-free.dev/ws
+   ```
+3. Bring up the stack with the `proxy` profile so Caddy is in front:
+   ```
+   docker compose --profile proxy up -d --build
+   ```
+4. Tunnel port 80:
+   ```
+   ngrok http --url=<your-name>.ngrok-free.dev 80
+   ```
+5. **Open the ngrok URL in your browser** (not `localhost`) — invite links use `window.location.origin`, so the URL your friend gets matches what you opened.
+
+If you change `NEXT_PUBLIC_ROOM_WS_URL` later (e.g. switch domains), re-run step 3 with `--build` so the new value gets baked in.
+
+#### Option B — two tunnels on different hostnames (paid ngrok or random free `.app` URLs)
+
+Use this only if you have a paid plan with multiple reserved domains, or you don't mind URLs changing every restart.
+
+1. Authtoken + config:
    ```
    ngrok config add-authtoken <token>
    ```
@@ -120,19 +148,11 @@ Both the web app (3000) and the WS relay (3001) need public reachability. Free n
        proto: http
        addr: 3001
    ```
-3. Start both:
-   ```
-   ngrok start --all
-   ```
-   You'll get two URLs, e.g. `https://abcd.ngrok-free.app` (web) and `https://efgh.ngrok-free.app` (room).
-4. Put the **room** URL in `.env.local` as `wss://`:
-   ```
-   NEXT_PUBLIC_ROOM_WS_URL=wss://efgh.ngrok-free.app
-   ```
-5. Restart `npm run dev` so Next picks up the env change.
-6. **Open the web ngrok URL in your browser** (not `localhost:3000`) — invite links use `window.location.origin`, so opening via ngrok ensures your friend gets a reachable link.
+3. `ngrok start --all` → two URLs, e.g. `https://abcd.ngrok-free.dev` (web) and `https://efgh.ngrok-free.dev` (room).
+4. Set `NEXT_PUBLIC_ROOM_WS_URL=wss://efgh.ngrok-free.dev` in `.env.local`, restart `npm run dev` (or rebuild if Docker).
+5. Open the **web** URL in your browser, not localhost.
 
-ngrok URLs change on every restart unless you have a reserved domain. For longer-lived tunnels, **Cloudflare Tunnel** (`cloudflared`) is free, supports multiple ingress rules, and skips the "Visit Site" interstitial.
+For longer-lived tunnels with multiple ingress rules and no "Visit Site" interstitial, **Cloudflare Tunnel** (`cloudflared`) is free.
 
 </details>
 
