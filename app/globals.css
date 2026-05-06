@@ -941,6 +941,8 @@ h2::before {
 .sk-chip { height: 22px; width: 44px; border-radius: 4px; }
 .sk-btn { height: 46px; width: 140px; border-radius: 10px; }
 .sk-btn-ghost { width: 120px; opacity: .6; }
+.sk-pill { height: 30px; width: 64px; border-radius: 999px; }
+.sk-player { width: 100%; height: 70vh; min-height: 460px; border-radius: 14px; }
 .hero-skel { background: linear-gradient(180deg, var(--panel) 0%, var(--bg) 100%); }
 .spot-bg-skel { position: absolute; inset: 0; opacity: .6; border-radius: 0; }
 .sk-spot-title { height: 60px; width: min(60%, 360px); margin: 0 0 16px; border-radius: 8px; }

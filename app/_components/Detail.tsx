@@ -495,6 +495,18 @@ function DetailSkeleton({ type }: { type: "movie" | "tv" }) {
           </div>
         </div>
       </div>
+      <div className="player-section">
+        <div className="provider-bar">
+          <span className="provider-label">Source</span>
+          <div className="provider-pills">
+            <div className="sk sk-pill" />
+            <div className="sk sk-pill" />
+            <div className="sk sk-pill" />
+            <div className="sk sk-pill" />
+          </div>
+        </div>
+        <div className="player-wrap"><div className="sk sk-player" /></div>
+      </div>
       <div className="detail-body">
         <section className="info-grid">
           {Array.from({ length: 6 }).map((_, i) => (

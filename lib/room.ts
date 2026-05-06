@@ -22,9 +22,9 @@ export type ServerMsg =
   | { type: "request_clear"; fromId: string }
   | { type: "request_resolved"; approved: boolean; expired?: boolean };
 
-export type RequestKind = "pause" | "episode" | "media";
+export type RequestKind = "pause" | "play" | "episode" | "media";
 export type RequestPayload =
-  | { kind?: undefined } // pause
+  | { kind?: undefined } // pause / play
   | { delta: 1 | -1 } // episode
   | { mediaUrl: string; label: string }; // media
 

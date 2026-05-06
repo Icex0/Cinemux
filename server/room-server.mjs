@@ -208,10 +208,10 @@ wss.on("connection", (ws) => {
       // One outstanding request PER USER — but multiple users can have one each.
       if (room.pendingRequests.has(memberId)) return;
       const kind = String(msg.kind || "");
-      if (!["pause", "episode", "media"].includes(kind)) return;
+      if (!["pause", "play", "episode", "media"].includes(kind)) return;
       const raw = msg.payload || {};
       let payload;
-      if (kind === "pause") {
+      if (kind === "pause" || kind === "play") {
         payload = {};
       } else if (kind === "episode") {
         const delta = Number(raw.delta);

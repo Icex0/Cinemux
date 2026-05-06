@@ -14,7 +14,7 @@ import {
 } from "@/lib/room";
 import { ALPHA_PROVIDER } from "@/lib/providers";
 import { Dialog } from "./Dialog";
-import { Ban, Check, ChevronRight, Copy, Crown, Hand, LogOut, Maximize2, Minimize2, Pin, PinOff, Search, Send, Volume2, VolumeX, X, Image as ImageIcon } from "lucide-react";
+import { Ban, Check, ChevronRight, Copy, Crown, Hand, LogOut, Maximize2, Minimize2, Pin, PinOff, Play, Search, Send, Volume2, VolumeX, X, Image as ImageIcon } from "lucide-react";
 
 const WS_URL = process.env.NEXT_PUBLIC_ROOM_WS_URL || "ws://localhost:3001";
 // Watch-party sync uses the canonical (Alpha) provider's origin for postMessage.
@@ -228,7 +228,7 @@ export function Room({
     } else if (msg.type === "request_resolved") {
       const k = myPendingReq?.kind;
       setMyPendingReq(null);
-      const noun = k === "media" ? "suggestion" : k === "episode" ? "episode change" : "pause request";
+      const noun = k === "media" ? "suggestion" : k === "episode" ? "episode change" : k === "play" ? "play request" : "pause request";
       const text = msg.expired
         ? `Your ${noun} expired (no response).`
         : msg.approved
@@ -412,6 +412,8 @@ export function Room({
     if (approve) {
       if (req.kind === "pause") {
         iframeRef.current?.contentWindow?.postMessage({ command: "pause" }, ALPHA_ORIGIN);
+      } else if (req.kind === "play") {
+        iframeRef.current?.contentWindow?.postMessage({ command: "play" }, ALPHA_ORIGIN);
       } else if (req.kind === "episode") {
         const delta = (req.payload as { delta: 1 | -1 }).delta;
         onStepEpisode(delta);
@@ -643,6 +645,7 @@ export function Room({
               canPrev={canPrevEpisode}
               canNext={canNextEpisode}
               onRequestPause={() => { sendRequest("pause", {}); setActionsOpen(false); }}
+              onRequestPlay={() => { sendRequest("play", {}); setActionsOpen(false); }}
               onRequestEpisode={(delta) => { sendRequest("episode", { delta }); setActionsOpen(false); }}
               onSuggestMedia={(mediaUrl, label) => { sendRequest("media", { mediaUrl, label }); setActionsOpen(false); }}
             />
@@ -763,12 +766,13 @@ function describeRequestForHost(kind: RequestKind, payload: RequestPayload) {
     const label = (payload as { label: string }).label;
     return <>suggests watching <strong>{label}</strong></>;
   }
+  if (kind === "play") return "is requesting to play";
   return "is requesting a pause";
 }
 
 function ActionsMenu({
   onClose, isHost, hasPending, isTv, canPrev, canNext,
-  onRequestPause, onRequestEpisode, onSuggestMedia,
+  onRequestPause, onRequestPlay, onRequestEpisode, onSuggestMedia,
 }: {
   onClose: () => void;
   isHost: boolean;
@@ -777,6 +781,7 @@ function ActionsMenu({
   canPrev: boolean;
   canNext: boolean;
   onRequestPause: () => void;
+  onRequestPlay: () => void;
   onRequestEpisode: (delta: 1 | -1) => void;
   onSuggestMedia: (mediaUrl: string, label: string) => void;
 }) {
@@ -824,6 +829,17 @@ function ActionsMenu({
       >
         <Hand size={14} />
         <span className="actions-menu-label">Request pause</span>
+        <span className="actions-menu-hint">{hint}</span>
+      </button>
+      <button
+        type="button"
+        className="actions-menu-item"
+        onClick={onRequestPlay}
+        disabled={!canRequest}
+        title={isHost ? "You are the host — you can play directly" : hasPending ? "Already requested" : "Ask the host to play"}
+      >
+        <Play size={14} />
+        <span className="actions-menu-label">Request play</span>
         <span className="actions-menu-hint">{hint}</span>
       </button>
       {isTv && (
