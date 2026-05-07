@@ -124,8 +124,11 @@ wss.on("connection", (ws) => {
       if (reclaimedHost) {
         room.hostId = memberId;
       } else if (adoptHost) {
+        // Interim host only: do NOT overwrite hostSessionId. Preserves the original
+        // host's reclaim priority if they return (e.g. after a slow reconnect during
+        // a media-change navigation). Original host wins; interim has full host powers
+        // until then.
         room.hostId = memberId;
-        room.hostSessionId = sessionId;
       }
 
       send(ws, {
