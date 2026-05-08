@@ -385,7 +385,7 @@ export function Detail({ type, id }: { type: "movie" | "tv"; id: string }) {
           <>
             <section className="info-grid">
               {year && (
-                <Info label="Year" value={<Link className="lk" href={dlink({ year })}>{year}</Link>} />
+                <Info label="Year" value={<Link className="lk" prefetch={false} href={dlink({ year })}>{year}</Link>} />
               )}
               {details.certificate && <Info label="Certificate" value={details.certificate} />}
               {details.countries.length > 0 && <Info label="Country" value={details.countries.join(", ")} />}
@@ -395,7 +395,7 @@ export function Detail({ type, id }: { type: "movie" | "tv"; id: string }) {
                   <span className="lk-list">
                     {details.genres.map((g, i) => (
                       <span key={g.id}>
-                        <Link className="lk" href={dlink({ genre: g.id })}>{g.name}</Link>
+                        <Link className="lk" prefetch={false} href={dlink({ genre: g.id })}>{g.name}</Link>
                         {i < details.genres.length - 1 && <span className="sep"> | </span>}
                       </span>
                     ))}
@@ -406,14 +406,14 @@ export function Detail({ type, id }: { type: "movie" | "tv"; id: string }) {
                 <Info label="Keywords" value={
                   <span className="kw">
                     {details.keywords.slice(0, 12).map((k) => (
-                      <Link key={k.id} className="kw-tag" href={dlink({ keyword: k.id })}>#{k.name}</Link>
+                      <Link key={k.id} className="kw-tag" prefetch={false} href={dlink({ keyword: k.id })}>#{k.name}</Link>
                     ))}
                   </span>
                 } />
               )}
               {details.collection && (
                 <Info label="Collection" value={
-                  <Link className="lk" href={`/discover?type=movie&collection=${details.collection.id}`}>{details.collection.name}</Link>
+                  <Link className="lk" prefetch={false} href={`/discover?type=movie&collection=${details.collection.id}`}>{details.collection.name}</Link>
                 } />
               )}
               {(details.credits.directors.length > 0 || details.credits.creators.length > 0) && (
@@ -423,7 +423,7 @@ export function Detail({ type, id }: { type: "movie" | "tv"; id: string }) {
                     <span className="lk-list">
                       {(details.credits.directors.length ? details.credits.directors : details.credits.creators).map((p, i, arr) => (
                         <span key={p.id}>
-                          <Link className="lk" href={dlink({ person: p.id })}>{p.name}</Link>
+                          <Link className="lk" prefetch={false} href={dlink({ person: p.id })}>{p.name}</Link>
                           {i < arr.length - 1 && <span className="sep">, </span>}
                         </span>
                       ))}
@@ -438,7 +438,7 @@ export function Detail({ type, id }: { type: "movie" | "tv"; id: string }) {
                 <h2>Cast</h2>
                 <div className="cast-row">
                   {details.cast.map((c) => (
-                    <Link className="cast" key={c.id} href={dlink({ person: c.id })}>
+                    <Link className="cast" key={c.id} prefetch={false} href={dlink({ person: c.id })}>
                       <div className="cast-img">
                         {c.profile ? <img src={c.profile} alt={c.name} /> : <div className="placeholder">{c.name}</div>}
                       </div>

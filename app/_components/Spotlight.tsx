@@ -8,6 +8,11 @@ export function Spotlight({ items }: { items: CatalogItem[] }) {
   const [index, setIndex] = useState(0);
   const [drag, setDrag] = useState(0);
   const [dragging, setDragging] = useState(false);
+  const [loaded, setLoaded] = useState<Set<number>>(() => {
+    const s = new Set<number>();
+    for (let k = 0; k < Math.min(3, items.length); k++) s.add(k);
+    return s;
+  });
   const startX = useRef(0);
   const startY = useRef(0);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -87,6 +92,16 @@ export function Spotlight({ items }: { items: CatalogItem[] }) {
   useEffect(() => { if (index >= total) setIndex(0); }, [total, index]);
 
   useEffect(() => {
+    if (total === 0) return;
+    setLoaded((prev) => {
+      const next = new Set(prev);
+      for (let k = 0; k < 3; k++) next.add((index + k) % total);
+      if (next.size === prev.size) return prev;
+      return next;
+    });
+  }, [index, total]);
+
+  useEffect(() => {
     if (total <= 1 || dragging) return;
     const t = setTimeout(() => setIndex((i) => (i + 1) % total), 10000);
     return () => clearTimeout(t);
@@ -111,7 +126,7 @@ export function Spotlight({ items }: { items: CatalogItem[] }) {
         style={{ transform: `translate3d(calc(${offsetPct}% + ${drag}px), 0, 0)` }}
       >
         {items.map((item, i) => (
-          <Slide key={String(item.id)} item={item} active={i === index} />
+          <Slide key={String(item.id)} item={item} active={i === index} load={loaded.has(i)} />
         ))}
       </div>
       {total > 1 && (
@@ -130,16 +145,16 @@ export function Spotlight({ items }: { items: CatalogItem[] }) {
   );
 }
 
-function Slide({ item, active }: { item: CatalogItem; active: boolean }) {
+function Slide({ item, active, load }: { item: CatalogItem; active: boolean; load: boolean }) {
   return (
     <div className="spotlight">
-      {item.backdrop && (
+      {load && item.backdrop && (
         <img className={`spot-bg ${active ? "in" : ""}`} src={item.backdrop} alt="" aria-hidden draggable={false} />
       )}
       <div className="spot-shade" />
       <div className="spot-inner">
         <div className="spot-text">
-          {item.logo ? (
+          {load && item.logo ? (
             <img className="spot-logo" src={item.logo} alt={item.title} draggable={false} />
           ) : (
             <h1 className="spot-title">{item.title}</h1>
