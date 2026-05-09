@@ -152,7 +152,50 @@ Use this only if you have a paid plan with multiple reserved domains, or you don
 4. Set `NEXT_PUBLIC_ROOM_WS_URL=wss://efgh.ngrok-free.dev` in `.env.local`, restart `npm run dev` (or rebuild if Docker).
 5. Open the **web** URL in your browser, not localhost.
 
-For longer-lived tunnels with multiple ingress rules and no "Visit Site" interstitial, **Cloudflare Tunnel** (`cloudflared`) is free.
+</details>
+
+### 4. (Optional) Sharing on the public internet via Cloudflare Tunnel
+
+<details>
+<summary>Click to expand — alternative to ngrok with a real domain and no session limits</summary>
+
+If you own a domain on Cloudflare, `cloudflared` gives you a real subdomain (e.g. `dev.example.com`), no time-limited sessions, no "Visit Site" interstitial, and TLS terminated at Cloudflare's edge. Free.
+
+Install:
+
+```
+winget install --id Cloudflare.cloudflared        # Windows
+brew install cloudflared                          # macOS
+```
+
+One-time setup (opens browser for OAuth):
+
+```
+cloudflared tunnel login
+cloudflared tunnel create cinemux-dev
+cloudflared tunnel route dns cinemux-dev dev.<your-domain>
+```
+
+Set the WS URL in `.env` (build-time var — must be set *before* the build):
+
+```
+NEXT_PUBLIC_ROOM_WS_URL=wss://dev.<your-domain>/ws
+```
+
+The room server's Origin allowlist must include the tunnel hostname (otherwise the WS handshake returns 403):
+
+```
+ROOM_ALLOWED_ORIGINS=https://dev.<your-domain>
+```
+
+Then bring up the stack with the `proxy` profile (Caddy handles the `/ws` routing) and run the tunnel pointed at Caddy on port 80:
+
+```
+docker compose --profile proxy up -d --build
+cloudflared tunnel run --url http://localhost:80 cinemux-dev
+```
+
+If you don't need watch-party, skip Caddy and point cloudflared straight at the web app (or `npm run dev`): `--url http://localhost:3000`.
 
 </details>
 
